@@ -3,7 +3,6 @@
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/Input/SCheckBox.h"
 
-
 class SCheckBoxCustom : public SCompoundWidget
 {
 public:

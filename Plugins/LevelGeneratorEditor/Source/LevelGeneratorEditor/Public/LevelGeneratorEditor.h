@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "RoomData.h"
+#include "DungeonData.h"
 #include "Modules/ModuleManager.h"
 
 class UBSPDungeonGenerator;
@@ -23,11 +23,9 @@ protected:
 	void OnEditorInitialized(double InDuration);
 
 private:
-	TSharedPtr<FRoomData> RoomData;
+	TSharedPtr<FDungeonData> RoomData;
 	FOnCustomButtonClicked OnCustomButtonClicked;
-	void OnActorsDragged(const TArray<UObject*>& Objects,const TArray<AActor*>& Actors);
 	void RegisterMenus();
-	FReply OnDeleteButtonClicked();
 	TSharedPtr<FUICommandList> PluginCommands;
 
 

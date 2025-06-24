@@ -25,7 +25,7 @@ public class LevelGeneratorEditor : ModuleRules
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Core",
+				"Core", "PCG",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
@@ -48,6 +48,8 @@ public class LevelGeneratorEditor : ModuleRules
 				"PropertyEditor",
 				"UnrealEd",
 				"EditorSubsystem", "StaticMeshEditor","MeshDescription","StaticMeshDescription",
+				"EditorWidgets","UMGEditor",
+				"PCG"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

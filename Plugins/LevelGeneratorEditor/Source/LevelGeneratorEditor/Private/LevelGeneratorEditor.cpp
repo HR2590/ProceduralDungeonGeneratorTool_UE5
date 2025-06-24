@@ -1,28 +1,20 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "LevelGeneratorEditor.h"
 
-#include "BSPDungeonGenerator.h"
-#include "ComboBoxWithButton.h"
-#include "SCheckBox.h"
-#include "Widgets/Input/SButton.h"
-#include "DynamicMeshArray.h"
-#include "LevelGeneratorEditorStyle.h"
+#include "LevelGeneratorEditor.h"
+#include "EditorUtilityWidgetBlueprint.h"
 #include "LevelGeneratorEditorCommands.h"
-#include "StaticMeshArray.h"
-#include "TextWithButton.h"
-#include "TextWithInputValue.h"
+#include "LevelGeneratorEditorStyle.h"
 #include "ToolMenus.h"
 #include "WorkspaceMenuStructure.h"
 #include "WorkspaceMenuStructureModule.h"
-
-#include "Widgets/Docking/SDockTab.h"
-#include "Widgets/Layout/SBox.h"
-#include "Widgets/Text/STextBlock.h"
-#include "Widgets/Layout/SScrollBox.h"
-
 #include "Editor/UnrealEd/Public/EditorViewportClient.h"
-
+#include "Kismet2/KismetDebugUtilities.h"
+#include "Widgets/Docking/SDockTab.h"
+#include "Widgets/Input/SButton.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Text/STextBlock.h"
 
 
 static const FName LevelGeneratorEditorTabName("LevelGeneratorEditor");
@@ -56,8 +48,8 @@ void FLevelGeneratorEditorModule::StartupModule()
 	   .SetAutoGenerateMenuEntry(false); //
 	
 
-	FEditorDelegates::OnNewActorsDropped.AddRaw(this,&FLevelGeneratorEditorModule::OnActorsDragged);
-	FEditorDelegates::OnEditorInitialized.AddRaw(this,&FLevelGeneratorEditorModule::OnEditorInitialized);
+//	FEditorDelegates::OnNewActorsDropped.AddRaw(this,&FLevelGeneratorEditorModule::OnActorsDragged);
+//	FEditorDelegates::OnEditorInitialized.AddRaw(this,&FLevelGeneratorEditorModule::OnEditorInitialized);
 
 
 }
@@ -80,9 +72,31 @@ void FLevelGeneratorEditorModule::ShutdownModule()
 
 TSharedRef<SDockTab> FLevelGeneratorEditorModule::OnSpawnTab(const FSpawnTabArgs& SpawnTabArgs)
 {
+	
+	const FString Path = TEXT("/Game/Blueprints/Assets/Widgets/BP_DungeonGenerator"); // Ajusta esto al path real
+
+	if (auto WidgetBP = LoadObject<UEditorUtilityWidgetBlueprint>(nullptr, *Path))
+	{
+		FKismetDebugUtilities::ClearBreakpoints(WidgetBP);
+
+		auto Widget =CreateWidget<UUserWidget>(GEditor->GetEditorWorldContext().World(),
+			Cast<UClass>(WidgetBP->GeneratedClass));
+		return SNew(SDockTab)
+			.TabRole(NomadTab)
+			[
+				Widget->TakeWidget()
+			];
+	}
+
+
+	return SNew(SDockTab).TabRole(NomadTab)
+		[ SNew(STextBlock).Text(LOCTEXT("ErrorLoading", "Failed to load widget.")) ];
+
+	
+	/*
 	 return SNew(SDockTab)
         .TabRole(NomadTab)
-        .Label(LOCTEXT("Level Gen Editor", "Level Generator Editor"))
+        .Label(LOCTEXT(Level Gen Editor, Level Generator Editor))
         .OnTabActivated_Lambda([](const TSharedRef<SDockTab>& Tab, ETabActivationCause Cause)
         {
             // Mueve la ventana cerca del World Settings
@@ -268,7 +282,9 @@ TSharedRef<SDockTab> FLevelGeneratorEditorModule::OnSpawnTab(const FSpawnTabArgs
                     ]
                 ]
             ]
-        ];
+        ];*/
+
+	
 }
 
 
@@ -287,14 +303,8 @@ void FLevelGeneratorEditorModule::OpenSlateMenu()
 
 void FLevelGeneratorEditorModule::OnEditorInitialized(double InDuration)
 {
-	RoomData=MakeShared<FRoomData>();
-	GEditor->GetEditorSubsystem<UBSPDungeonGenerator>()->AssignData(RoomData);
-}
-
-void FLevelGeneratorEditorModule::OnActorsDragged(const TArray<UObject*>& Objects,const TArray<AActor*>& Actors)
-{
-
-	*RoomData->InitPosition=Actors[0]->GetActorLocation();
+//	RoomData=MakeShared<FRoomData>();
+//	GEditor->GetEditorSubsystem<UBSPDungeonGenerator>()->AssignData(RoomData);
 	
 }
 
@@ -321,11 +331,6 @@ void FLevelGeneratorEditorModule::RegisterMenus()
 	
 }
 
-FReply FLevelGeneratorEditorModule::OnDeleteButtonClicked()
-{
-	GEditor->GetEditorSubsystem<UBSPDungeonGenerator>()->DeleteAll();
-	return FReply::Handled();
-}
 
 #undef LOCTEXT_NAMESPACE
 	

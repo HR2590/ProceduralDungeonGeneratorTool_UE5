@@ -71,8 +71,9 @@ FText SComboBoxWithButton::GetCurrentOptionText() const
 
 FReply SComboBoxWithButton::OnUseButtonClicked()
 {
-	*RoomData->minBaseRoomSizeX=*RoomData->minMeshSizeX**RoomData->minRoomSizeX;
-	*RoomData->minBaseRoomSizeY=*RoomData->minMeshSizeY**RoomData->minRoomSizeY;
+	//*RoomData->minBaseRoomSizeX=*RoomData->minMeshSizeX**RoomData->minRoomSizeX;
+	//*RoomData->minBaseRoomSizeY=*RoomData->minMeshSizeY**RoomData->minRoomSizeY;
+	/*
 	if (SelectedOption.IsValid() && SelectedOption->Equals(TextOptions[1]))
 	{
 		GEditor->GetEditorSubsystem<UBSPDungeonGenerator>()->BSPUniformAlgorithm();
@@ -81,7 +82,7 @@ FReply SComboBoxWithButton::OnUseButtonClicked()
 	{
 		GEditor->GetEditorSubsystem<UBSPDungeonGenerator>()->BSPRandomAlgorithm();
 	}
-	
+	*/
 	return FReply::Handled();
 	
 }

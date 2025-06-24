@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "FRoom.h"
-#include "RoomData.h"
+#include "DungeonData.h"
 #include "Engine/StaticMeshActor.h"
 #include "BSPRoom.generated.h"
 
@@ -17,25 +17,25 @@ class LEVELGENERATOREDITOR_API ABSPRoom : public AStaticMeshActor
 
 public:
 	ABSPRoom();
-	// Sets default values for this actor's properties
-	void InitRoom(const FRoom& InData, const TSharedPtr<FRoomData>& InDungeonData);
-	UPROPERTY(EditAnywhere,meta=(allowPrivateAccess=true),Category="RoomInformation")FRoom Data;
 
-protected:
-	// Called when the game starts or when spawned
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Collision") UBoxComponent* BoxCollision;
-	UPROPERTY()TArray<AStaticMeshActor*> FloorToMerge;
-	UPROPERTY()TArray<AStaticMeshActor*> WallsToMerge;
-	
+	void InitRoom(const FRoom& InData, const FDungeonData& InDungeonData);
+	UPROPERTY(EditAnywhere,meta=(allowPrivateAccess=true),Category="RoomInformation")
+	FRoom Data;
+	UFUNCTION(BlueprintCallable,BlueprintPure,meta=(AllowPrivateAccess=true),Category="BSP Dungeon Generator")
+	FRoom GetRoomData();
+	void CleanMeshes();
 	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
 	virtual void PostEditMove(bool bFinished) override;
-
-	static AStaticMeshActor* MergeStaticMeshes(UWorld* World, const TArray<AStaticMeshActor*>& StaticMeshes);
-	void RespawnRoom(const FRoom& InRoom);
+protected:
 	
+	virtual void Destroyed() override;
+	
+	void CreateRoom(const FRoom& InRoom);
+	AStaticMeshActor* SpawnWall(const FVector& InLocation,const FRotator& InRotator, bool bIsPathway);
+	void SpawnFloor(const FVector& InLocation,bool bIsPathway);
+	bool CheckWallDoor(const FVector& InDoor);
 
 private:
-	TSharedPtr<FRoomData> DungeonData;
-
+	FDungeonData DungeonData;
+	
 };

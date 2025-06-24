@@ -1,5 +1,5 @@
 #pragma once
-#include "RoomData.h"
+#include "DungeonData.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/Input/SComboBox.h"
 #include "Widgets/Input/SButton.h"
@@ -11,13 +11,13 @@ class SComboBoxWithButton : public SCompoundWidget
 {
 public:
     SLATE_BEGIN_ARGS(SComboBoxWithButton) {}
-        SLATE_ARGUMENT(TSharedPtr<FRoomData>,RoomData)
+        SLATE_ARGUMENT(TSharedPtr<FDungeonData>,RoomData)
     SLATE_END_ARGS()
 
     void Construct(const FArguments& InArgs);
 
 private:
-    TSharedPtr<FRoomData> RoomData;
+    TSharedPtr<FDungeonData> RoomData;
     
     /** Opciones del ComboBox */
     TArray<TSharedPtr<FString>> Options;

@@ -2,138 +2,125 @@
 
 #include "BSPDungeonGenerator.h"
 #include "BSPRoom.h"
-
-
-#define MinToleranceX 0.0f
-#define MinToleranceY 0.0f
+#include "PCGComponent.h"
+#include "EditorUtilityWidgetBlueprint.h"
+#include "PCGRoom.h"
+#include "StaticMeshEditorSubsystem.h"
+#include "StaticMeshEditorSubsystemHelpers.h"
+#include "Blueprint/UserWidget.h"
+#include "GameFramework/PlayerStart.h"
+#include "Kismet/GameplayStatics.h"
 
 
 UBSPDungeonGenerator::UBSPDungeonGenerator()
 {
-	
 }
 
-// Called when the game starts or when spawned
-
-
-void UBSPDungeonGenerator::bSplit(const bool& InHorizontalSplit, const FVector& InCenter, const FVector& InSize,
-								FVector& Size_Part1, FVector& Center_Part1,FVector& Size_Part2,FVector& Center_Part2)
+void UBSPDungeonGenerator::bSplit(bool& bInHorizontalSplit,const FVector& InCenter, const FVector& InSize,
+                                  FVector& Size_Part1, FVector& Center_Part1,FVector& Size_Part2,FVector& Center_Part2)
 {
-	uint32 Difference,TempDivider;
-	
-	if (!InHorizontalSplit)
+	float Difference;
+	bInHorizontalSplit=!(InSize.X>InSize.Y);
+	if (InSize.X>InSize.Y)
 	{
 		
-		Difference=Size_Part1.X/2;
-		TempDivider=InSize.X/2;
+		Difference=InSize.X/2;
+		Size_Part1=FVector(Difference-DungeonData.tolerance.X/2,InSize.Y,InSize.Z);
+		Size_Part2=FVector(Difference-DungeonData.tolerance.X/2,InSize.Y,InSize.Z);
+			
+		Center_Part1=FVector(InCenter.X-Difference/2-DungeonData.tolerance.X/2,InCenter.Y,InCenter.Z);
+		Center_Part2=FVector(InCenter.X+Difference/2+DungeonData.tolerance.X/2,InCenter.Y,InCenter.Z);
 		
-		Size_Part1=FVector(TempDivider-*RoomData->minToleranceX,InSize.Y,Size_Part1.Z);
-		Size_Part2=FVector(TempDivider-*RoomData->minToleranceX,InSize.Y,Size_Part2.Z);
-
-		Center_Part1=FVector(InCenter.X+Difference,InCenter.Y,InCenter.Z);
-		Center_Part2=FVector(InCenter.X-Difference,InCenter.Y,InCenter.Z);
-
+		
 	}
 	else
 	{
-		Difference=Size_Part1.Y/2;
-		TempDivider=InSize.Y/2;
+		Difference=InSize.Y/2;
+		Size_Part1=FVector(InSize.X,Difference-DungeonData.tolerance.Y/2,InSize.Z);
+		Size_Part2=FVector(InSize.X,Difference-DungeonData.tolerance.Y/2,InSize.Z);
+			
+		Center_Part1=FVector(InCenter.X,InCenter.Y-Difference/2-DungeonData.tolerance.Y/2,InCenter.Z);
+		Center_Part2=FVector(InCenter.X,InCenter.Y+Difference/2+DungeonData.tolerance.Y/2,InCenter.Z);
 		
-		Size_Part1=FVector(InSize.X,TempDivider-*RoomData->minToleranceY,Size_Part1.Z);
-		Size_Part2=FVector(InSize.X,TempDivider-*RoomData->minToleranceY,Size_Part2.Z);
-
-		Center_Part1=FVector(InCenter.X,InCenter.Y+Difference,InCenter.Z);
-		Center_Part2=FVector(InCenter.X,InCenter.Y-Difference,InCenter.Z);
+		
+	
 	}
 
+NormalizeVectorToSnap(Size_Part1,false);
+NormalizeVectorToSnap(Size_Part2,false);
+
+	NormalizeVectorToSnap(Center_Part1,true);
+	NormalizeVectorToSnap(Center_Part2,true);
+	
 }
 
-bool UBSPDungeonGenerator::PartitionSpace(const FVector& InCenter, const FVector& InSize, const uint32& InDepth)
-{
 
-	/*
+void UBSPDungeonGenerator::MeshAlgorithmSpace(const FVector& InCenter, const FVector& InSize, const int32& InDepth,int32& InSave)
+{
 	const int32 ActualDepth=InDepth;
 	
-	bool State2;
-	bool State1 = State2 = false;
-	bool bSplitState=FMath::RandBool();
+	int32 SaveLeft=0;
+	int32 SaveRight=SaveLeft;
+
+	bool bSplitState=false;
 	
-	FVector Size_Part1 = FVector(InSize.X/2,InSize.Y/2,InSize.Z );
+	FVector Size_Part1 = FVector(InSize.X/2.0f,InSize.Y/2.0f,InSize.Z );
 	FVector Size_Part2 = Size_Part1;
 	
 	FVector Center_Part1 = InCenter;
 	FVector Center_Part2 = Center_Part1;
 
-	uint32 SizeX=static_cast<uint32>(InSize.X);
-	uint32 SizeY=static_cast<uint32>(InSize.Y);
+	const FInt32Vector Size=FInt32Vector(InSize);
+
+	const FInt32Vector minRoomSize=FInt32Vector(DungeonData.minRoomSize);
 	
-	if (SizeX<SizeY&&
-		SizeX>=(*RoomData->minRoomSizeX+*RoomData->minToleranceX)&&
-		SizeY>=(*RoomData->minRoomSizeY+*RoomData->minToleranceY)&&
-		!FMath::IsNegativeOrNegativeZero(InSize.X)&&!FMath::IsNegativeOrNegativeZero(InSize.Y))
+	if (Size.X>=minRoomSize.X&&Size.Y>=minRoomSize.Y&&Size.X>0&&Size.Y>0)
 	{
-			bSplitState=true;
-			bSplit(bSplitState,InCenter, InSize, Size_Part1, Center_Part1, Size_Part2, Center_Part2);
-	}
-	else if(SizeY<SizeX&&SizeX>=*RoomData->minRoomSizeX&&SizeY>=*RoomData->minRoomSizeY)
-	{
-			bSplitState=false;
-			bSplit(bSplitState,InCenter, InSize, Size_Part1, Center_Part1, Size_Part2, Center_Part2);
-	}
-	else if(SizeX>=*RoomData->minRoomSizeX&&SizeY>=*RoomData->minRoomSizeY)
-	{
-		
-		if(SizeX>=*RoomData->minRoomSizeX*2&&SizeY>=*RoomData->minRoomSizeY*2)
-			bSplit(bSplitState,InCenter, InSize, Size_Part1, Center_Part1, Size_Part2, Center_Part2);
-		else if(SizeX>=*RoomData->minRoomSizeX*2)
-		{
-			bSplitState=false;
-			bSplit(bSplitState,InCenter, InSize,Size_Part1, Center_Part1, Size_Part2, Center_Part2);
-		}
-		else if(SizeY>=*RoomData->minRoomSizeY*2)
-		{
-			bSplitState=true;
-			bSplit(bSplitState,InCenter, InSize, Size_Part1, Center_Part1, Size_Part2, Center_Part2);
-		}
-		else
-			bSplit(bSplitState,InCenter, InSize, Size_Part1, Center_Part1, Size_Part2, Center_Part2);
+		bSplit(bSplitState,InCenter, InSize, Size_Part1, Center_Part1, Size_Part2, Center_Part2);
 	}
 	else
 	{
-		SaveDepth=ActualDepth-1;
-		return false;
+		InSave=3;
+		return;
 	}
-	State1=PartitionSpace(Center_Part1, Size_Part1, ActualDepth+1);
-	State2=PartitionSpace(Center_Part2, Size_Part2, ActualDepth+1);
-
-	if(!State1&&!State2)
+	
+	
+	
+	MeshAlgorithmSpace(Center_Part1, Size_Part1, ActualDepth+1,SaveLeft);
+	MeshAlgorithmSpace(Center_Part2, Size_Part2, ActualDepth+1,SaveRight);
+	if(SaveLeft==3&&SaveRight==3) InSave=1;
+	if(SaveLeft==1||SaveRight==1) InSave=1;
+	
+	if(SaveLeft==3&&SaveRight==3)
 	{
-		if (Rooms.Find(ActualDepth))
+		TArray<FRoom> ActualRooms;
+		ActualRooms.Add(FRoom(InCenter, InSize,bSplitState,false,true));
+		for (auto& InRoom : ActualRooms)
 		{
-			Rooms[ActualDepth].Add(FRoom(InCenter, InSize,bSplitState));
-		}
-		else
-		{
-			TArray<FRoom> TempRooms;
-			TempRooms.Add(FRoom(InCenter, InSize,bSplitState));
-			Rooms.Add(ActualDepth,TempRooms);
+			
+			FActorSpawnParameters ObjectParams;
+			ObjectParams.ObjectFlags=RF_Transactional|RF_Public;
+			ObjectParams.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			
+			ABSPRoom* Room=GEditor->GetEditorWorldContext().World()->SpawnActor<ABSPRoom>(ABSPRoom::StaticClass(),
+				InRoom.CenterPosition,FRotator::ZeroRotator,ObjectParams);
+			Room->InitRoom(InRoom,DungeonData);
+
+			SpawnedRooms.AddUnique(Room);
 		}
 		
+		
 	}
-
-return true;
-*/
-	return true;
 }
 
-void UBSPDungeonGenerator::PartitionSpaceRandom(const FVector& InCenter, const FVector& InSize,const uint32& InDepth,uint32& InSave)
+void UBSPDungeonGenerator::PartitionSpaceRandom(const FVector& InCenter, const FVector& InSize,const int32& InDepth,int32& InSave)
 {
 	TArray<FRoom> ActualRooms;
 	
-	const uint32 ActualDepth=InDepth;
+	const int32 ActualDepth=InDepth;
 	
-	uint32 SaveLeft=0;
-	uint32 SaveRight=SaveLeft;
+	int32 SaveLeft=0;
+	int32 SaveRight=SaveLeft;
 
 	bool bSplitState=false;
 	
@@ -143,41 +130,44 @@ void UBSPDungeonGenerator::PartitionSpaceRandom(const FVector& InCenter, const F
 	FVector Center_Part1 = InCenter;
 	FVector Center_Part2 = Center_Part1;
 	
-	uint32 SizeX=static_cast<uint32>(InSize.X);
-	uint32 SizeY=static_cast<uint32>(InSize.Y);
+	int32 SizeX=static_cast<int32>(InSize.X);
+	int32 SizeY=static_cast<int32>(InSize.Y);
 	
-	if (ActualDepth<=*RoomData->Depth&&
-		SizeX>=*RoomData->minRoomSizeX+*RoomData->minToleranceX&&
-		SizeY>=*RoomData->minRoomSizeX+*RoomData->minToleranceY&&
+	if (ActualDepth<=DungeonData.algorithmDepth&&
+		SizeX>=DungeonData.minRoomSize.X&&
+		SizeY>=DungeonData.minRoomSize.X&&
 		!FMath::IsNegativeOrNegativeZero(InSize.X)&&!FMath::IsNegativeOrNegativeZero(InSize.Y))
 	{
-		uint32 minRoomDivider;
+		float minRoomDivider,Difference,Divider,SizeUnit2;
 
 		if (SizeX>SizeY)
 		{
-			minRoomDivider=*RoomData->minRoomSizeX+*RoomData->minToleranceX+MinToleranceX;
-			float DividerX = FMath::RoundToInt32(FMath::RandRange(minRoomDivider, InSize.X-minRoomDivider)/(*RoomData->minRoomSizeX))**RoomData->minRoomSizeX;
-			float SizeUnit2=FMath::RoundToInt32(InSize.X-DividerX);
-
-			Size_Part1=FVector(DividerX-MinToleranceX,InSize.Y,InSize.Z);
-			Size_Part2=FVector(SizeUnit2-MinToleranceX,InSize.Y,InSize.Z);
 			
-			Center_Part1=FVector(InCenter.X-(SizeUnit2/(*RoomData->DivisorX)),InCenter.Y,InCenter.Z);
-			Center_Part2=FVector(InCenter.X+(DividerX),InCenter.Y,InCenter.Z);
-		
+			minRoomDivider=DungeonData.minRoomSize.X+DungeonData.tolerance.X;
+			Difference= InSize.X-minRoomDivider;
+			Divider = FMath::RoundToInt32(FMath::RandRange(minRoomDivider,Difference)/(DungeonData.minRoomMeshSize.X))*DungeonData.minRoomMeshSize.X;
+			SizeUnit2=FMath::RoundToInt32(InSize.X-Divider);
+
+			
+			Size_Part1=FVector(Divider-DungeonData.tolerance.X,InSize.Y,InSize.Z);
+			Size_Part2=FVector(SizeUnit2-DungeonData.tolerance.X,InSize.Y,InSize.Z);
+			
+			Center_Part1=FVector(InCenter.X-SizeUnit2/2,InCenter.Y,InCenter.Z);
+			Center_Part2=FVector(InCenter.X+Divider/2,InCenter.Y,InCenter.Z);
 		}
 		else
 		{
 			bSplitState=true;
-			minRoomDivider=*RoomData->minRoomSizeY+*RoomData->minToleranceY+MinToleranceY;
-			float DividerY = FMath::RoundToInt32(FMath::RandRange(minRoomDivider, InSize.Y-minRoomDivider)/(*RoomData->minRoomSizeY))**RoomData->minRoomSizeY;
-			float SizeUnit2=FMath::RoundToInt32(InSize.Y-DividerY);
+			minRoomDivider=DungeonData.minRoomSize.Y+DungeonData.tolerance.Y;
+			Difference=InSize.Y-minRoomDivider;
+			Divider = FMath::RoundToInt32(FMath::RandRange(minRoomDivider, Difference)/(DungeonData.minRoomMeshSize.Y))*DungeonData.minRoomMeshSize.Y;
+			SizeUnit2=FMath::RoundToInt32(InSize.Y-Divider);
 			
-			Size_Part1=FVector(InSize.X,DividerY-MinToleranceY,InSize.Z);
-			Size_Part2=FVector(InSize.X,SizeUnit2-MinToleranceY,InSize.Z);
+			Size_Part1=FVector(InSize.X,Divider-DungeonData.tolerance.Y,InSize.Z);
+			Size_Part2=FVector(InSize.X,SizeUnit2-DungeonData.tolerance.Y,InSize.Z);
 			
-			Center_Part1=FVector(InCenter.X,InCenter.Y-(SizeUnit2/(*RoomData->DivisorY)),InCenter.Z);
-			Center_Part2=FVector(InCenter.X,InCenter.Y+(DividerY),InCenter.Z);
+			Center_Part1=FVector(InCenter.X,InCenter.Y-SizeUnit2/2,InCenter.Z);
+			Center_Part2=FVector(InCenter.X,InCenter.Y+Divider/2,InCenter.Z);
 		}
 
 	}
@@ -187,128 +177,651 @@ void UBSPDungeonGenerator::PartitionSpaceRandom(const FVector& InCenter, const F
 		return;
 	}
 	
+	//NormalizeVectorToSnap(Center_Part1,false);
+	//NormalizeVectorToSnap(Center_Part2,false);
+	
 	PartitionSpaceRandom(Center_Part1, Size_Part1, ActualDepth+1,SaveLeft);
 	PartitionSpaceRandom(Center_Part2, Size_Part2, ActualDepth+1,SaveRight);
 	if(SaveLeft==3&&SaveRight==3) InSave=1;
-	if(SaveLeft==1) ActualRooms.Add(FRoom(Center_Part1, Size_Part1,bSplitState,false));
-	if(SaveRight==1) ActualRooms.Add(FRoom(Center_Part2, Size_Part2,bSplitState,false));
+	if(SaveLeft==1) ActualRooms.Add(FRoom(Center_Part1, Size_Part1,bSplitState,false,false));
+	if(SaveRight==1) ActualRooms.Add(FRoom(Center_Part2, Size_Part2,bSplitState,false,true));
 
 	if(ActualRooms.Num()!=0)
 	{
-		Rooms.FindOrAdd(ActualDepth);
-		Rooms.Find(ActualDepth)->Add(ActualRooms);
-	}
-	
-}
+		TArray<ABSPRoom*> PairRoom;
 
-
-
-/*
-void UBSPDungeonGenerator::SpawnRoom(const FRoom& InRoom)
-{
-	TArray<AStaticMeshActor*> ActorsToMerge;
-
-	FMeshDescription MergedMeshDesc;
-	FStaticMeshAttributes MergedAttributes(MergedMeshDesc);
-	MergedAttributes.Register();
-	
-	UWorld* WorldEditor = GEditor->GetEditorWorldContext().World();
-
-
-	uint32 halfX=InRoom.Size.X/2;
-	uint32 halfY=InRoom.Size.Y/2;
-	
-	
-	FVector Init=FVector(
-			InRoom.CenterPosition.X-halfX+*RoomData->minMeshSizeX/2,
-				InRoom.CenterPosition.Y-halfY+*RoomData->minMeshSizeY/2,
-				InRoom.CenterPosition.Z);
-	
-	int32 MaxX=FMath::RoundToInt32(InRoom.Size.X/(*RoomData->minMeshSizeX));
-	int32 MaxY=FMath::RoundToInt32(InRoom.Size.Y/(*RoomData->minMeshSizeY));
-	
-	for(int i=1;i<=MaxX;i++)
-	{
-		for(int j=1;j<=MaxY;j++)
+		
+		for (auto& InRoom : ActualRooms)
 		{
 			
-			AStaticMeshActor* Floor=WorldEditor->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(),
-				FVector(Init.X+*RoomData->minMeshSizeX*i,Init.Y+*RoomData->minMeshSizeY*j,Init.Z),
-				FRotator::ZeroRotator);
-			Floor->GetStaticMeshComponent()->SetStaticMesh(RoomData->MeshEntries[0]->Mesh);
-			ActorsToMerge.Add(Floor);
+			FActorSpawnParameters ObjectParams;
+			ObjectParams.ObjectFlags=RF_Transactional|RF_Public;
+			ObjectParams.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 			
-			if(i==1)
-			{
-				AStaticMeshActor* WallCorner=WorldEditor->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(),
-				FVector(Init.X-*RoomData->minMeshSizeX/2+*RoomData->minMeshSizeX*i,
-					Init.Y+*RoomData->minMeshSizeY*j,Init.Z),
-				FRotator::ZeroRotator);
-				WallCorner->GetStaticMeshComponent()->SetStaticMesh(RoomData->MeshEntries[1]->Mesh);
-				ActorsToMerge.Add(WallCorner);
-				
-			}
+			ABSPRoom* Room=GEditor->GetEditorWorldContext().World()->SpawnActor<ABSPRoom>(ABSPRoom::StaticClass(),
+				InRoom.CenterPosition,FRotator::ZeroRotator,ObjectParams);
+			Room->InitRoom(InRoom,DungeonData);
 			
-			if(i>=MaxX)
-			{
-				AStaticMeshActor* WallCorner=WorldEditor->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(),
-				FVector(Init.X+*RoomData->minMeshSizeX/2+*RoomData->minMeshSizeX*i,
-					Init.Y+*RoomData->minMeshSizeY*j,Init.Z),
-				FRotator::ZeroRotator);
-				WallCorner->GetStaticMeshComponent()->SetStaticMesh(RoomData->MeshEntries[1]->Mesh);
-				ActorsToMerge.Add(WallCorner);
-			}
-			
-			if(j==1)
-			{
-				AStaticMeshActor* WallCorner=WorldEditor->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(),
-				FVector(Init.X+*RoomData->minMeshSizeX*i,
-					Init.Y-*RoomData->minMeshSizeY/2+*RoomData->minMeshSizeY*j,Init.Z),
-				FRotator(0,90,0));
-				WallCorner->GetStaticMeshComponent()->SetStaticMesh(RoomData->MeshEntries[1]->Mesh);
-				ActorsToMerge.Add(WallCorner);
-			}
-			
-			if(j>=MaxY)
-			{
-				AStaticMeshActor* WallCorner=WorldEditor->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(),
-				FVector(Init.X+*RoomData->minMeshSizeX*i,
-					Init.Y+*RoomData->minMeshSizeY/2+*RoomData->minMeshSizeY*j,Init.Z),
-				FRotator(0,90,0));
-				WallCorner->GetStaticMeshComponent()->SetStaticMesh(RoomData->MeshEntries[1]->Mesh);
-				ActorsToMerge.Add(WallCorner);
-			}
-			
-			
-			
-			
+			SpawnedRooms.AddUnique(Room);
 		}
+		
+		
 	}
-	AStaticMeshActor* NewFloorMesh= MergeStaticMeshes(WorldEditor, ActorsToMerge);
-	if(NewFloorMesh)
-	{
-		NewFloorMesh->SetPivotOffset(NewFloorMesh->GetStaticMeshComponent()->GetStaticMesh()->GetBounds().Origin);
-		NewFloorMesh->SetActorLocation(FVector(InRoom.CenterPosition));
-	}
-	SpawnedActors.Add(NewFloorMesh);
-	ActorsToMerge.Empty();
 	
-	/*AStaticMeshActor* NewWallMesh = MergeStaticMeshes(WorldEditor, WallsToMerge);
-	if(ensure(NewWallMesh))
+}
+
+
+void UBSPDungeonGenerator::RespawnPlayerStart()
+{
+	for (auto& Room : SpawnedRooms)
 	{
-		NewWallMesh->SetPivotOffset(NewWallMesh->GetStaticMeshComponent()->GetStaticMesh()->GetBounds().Origin);
-		NewWallMesh->SetActorLocation(FVector(InRoom.CenterPosition));
+			FActorSpawnParameters ObjectParams;
+			ObjectParams.ObjectFlags=RF_Transactional|RF_Public;
+			if(Room->Data.BridgeActors.Num()>0)
+			{
+				GEditor->GetEditorWorldContext().World()->SpawnActor<APlayerStart>(
+					APlayerStart::StaticClass(),
+					Room->Data.CenterPosition+
+					FVector(0,0,DungeonData.minRoomMeshSize.Z),
+					FRotator::ZeroRotator, ObjectParams);
+				break;
+			}
+		
+	}
+}
+
+void UBSPDungeonGenerator::NormalizeVectorToSnap(FVector& InVector,bool IsPathway) const
+{
+	FInt32Vector VectorSnap=FInt32Vector(InVector);
+	if(IsPathway)
+	{
+		InVector.X=FMath::RoundToInt32(VectorSnap.X/DungeonData.minRoomMeshSize.X)*DungeonData.minRoomMeshSize.X;
+		InVector.Y=FMath::RoundToInt32(VectorSnap.Y/DungeonData.minRoomMeshSize.Y)*DungeonData.minRoomMeshSize.Y;
+		InVector.Z=FMath::RoundToInt32(VectorSnap.Z/DungeonData.minRoomMeshSize.Z)*DungeonData.minRoomMeshSize.Z;
+	}
+	else
+	{
+		InVector.X=FMath::TruncToInt32(VectorSnap.X/DungeonData.minRoomMeshSize.X)*DungeonData.minRoomMeshSize.X;
+		InVector.Y=FMath::TruncToInt32(VectorSnap.Y/DungeonData.minRoomMeshSize.Y)*DungeonData.minRoomMeshSize.Y;
+		InVector.Z=FMath::TruncToInt32(VectorSnap.Z/DungeonData.minRoomMeshSize.Z)*DungeonData.minRoomMeshSize.Z;
+	}
+	
+
+	
+}
+
+bool UBSPDungeonGenerator::IsCentered(const int32& InNumber)
+{
+	
+	
+	//UE_LOG(LogTemp, Warning, TEXT("Size: %d"), InNumber);
+	if(InNumber%2!=0) return true;
+	
+	int32 firstDigit=InNumber;
+
+	while(true)
+	{
+		
+		if(firstDigit==0)break;
+		if(firstDigit%10!=0)break;
+		
+		firstDigit/=10;
+	}
+
+	
+	//UE_LOG(LogTemp, Warning, TEXT("digit: %d"), firstDigit);
+	//UE_LOG(LogTemp, Warning, TEXT("result: %s"), (LastValue % 2 == 1) ? TEXT("true") : TEXT("false"));
+
+	return firstDigit % 2 != 0;
+
+	
+}
+
+void UBSPDungeonGenerator::SaveLoadingWidget(UEditorUtilityWidgetBlueprint* InWidget)
+{
+	if(InWidget) Widget=InWidget;
+}
+
+void UBSPDungeonGenerator::UpdateChestClass(TArray<TSubclassOf<AActor>> InClass)
+{
+	if(InClass.IsEmpty()) DeleteChests();
+	
+	DungeonData.ChestActors=InClass;
+}
+
+void UBSPDungeonGenerator::UpdatePCGClass(TArray<TSubclassOf<AActor>> InClass)
+{
+	if(InClass.IsEmpty()) DeleteInternals();
+	DungeonData.PCGActors=InClass;
+}
+
+
+void UBSPDungeonGenerator::BSPMeshAlgorithm(const FDungeonData& InRoomData)
+{
+	LoadingBar();
+	
+	int32 Save=0;
+	int32 Depth=0;
+	DungeonData = InRoomData;
+	DeleteDungeon();
+
+	if(DungeonData.floorMeshRoom.IsEmpty()||DungeonData.wallMeshRoom.IsEmpty()||
+	   DungeonData.floorMeshPathway.IsEmpty()||DungeonData.wallMeshPathway.IsEmpty()) return;
+
+
+	MeshAlgorithmSpace(FVector(DungeonData.initPosition),
+	                      FVector(DungeonData.dimensions.X, DungeonData.dimensions.Y, 1), Depth, Save);
+	GeneratePathways(DungeonData,false);
+	RespawnPlayerStart();
+	FSlateApplication::Get().ReleaseAllPointerCapture();
+}
+
+void UBSPDungeonGenerator::BSPRandomAlgorithm(const FDungeonData& InRoomData)
+{
+	LoadingBar();
+	int32 Save=0;
+	DungeonData = InRoomData;
+	DeleteDungeon();
+
+	if(DungeonData.floorMeshRoom.IsEmpty()||DungeonData.wallMeshRoom.IsEmpty()||
+	   DungeonData.floorMeshPathway.IsEmpty()||DungeonData.wallMeshPathway.IsEmpty()) return;
+	
+	PartitionSpaceRandom(FVector(DungeonData.initPosition), FVector(DungeonData.dimensions.X, DungeonData.dimensions.Y,1), 0,Save);
+
+	GeneratePathways(DungeonData,false);
+
+	RespawnPlayerStart();
+	
+	FSlateApplication::Get().ReleaseAllPointerCapture();
+
+}
+
+void UBSPDungeonGenerator::DestroyRoomsFromArray(TArray<ABSPRoom*>& InArrayRooms)
+{
+	if(InArrayRooms.IsEmpty()) return;
+	
+	for (auto& ActorRoom : InArrayRooms)
+		if(ActorRoom&&!ActorRoom->IsPendingKillPending())
+		{
+			ActorRoom->Destroy(false,true);
+		}
+		
+}
+
+void UBSPDungeonGenerator::DeleteDungeon()
+{
+	LoadingBar();
+	DeleteRooms();
+	DeletePathways();
+	DeleteInternals();
+	DeleteChests();
+	
+}
+
+void UBSPDungeonGenerator::DeleteRooms()
+{
+	LoadingBar();
+	DeleteAllPlayerStarts();
+	
+	if(SpawnedRooms.IsEmpty()) return;
+	
+	DestroyRoomsFromArray(SpawnedRooms);
+	
+	SpawnedRooms.Empty();
+}
+
+void UBSPDungeonGenerator::DeletePathways()
+{
+	LoadingBar();
+	DestroyRoomsFromArray( SpawnedPathways);
+		SpawnedPathways.Empty();
+	
+	ClearDoors(true,true);
+}
+
+void UBSPDungeonGenerator::DeleteInternals()
+{
+	LoadingBar();
+	if(SpawnedPCG.IsEmpty()) return;
+	for (auto& PCG : SpawnedPCG)
+	{
+		if(PCG) PCG->Destroy();
 	}
 	
 	
 }
 
-
-AStaticMeshActor* UBSPDungeonGenerator::MergeStaticMeshes(UWorld* World, const TArray<AStaticMeshActor*>& StaticMeshes)
+void UBSPDungeonGenerator::DeleteAllPlayerStarts()
 {
-	if (StaticMeshes.Num() == 0 || !World) return nullptr;
+	TArray<AActor*> PlayerStarts;
+	UGameplayStatics::GetAllActorsOfClass(GEditor->GetEditorWorldContext().World(),APlayerStart::StaticClass(),PlayerStarts);
+
+	for (auto& PlayerStart : PlayerStarts)
+	{
+		PlayerStart->Destroy();
+	}
+}
+
+
+void UBSPDungeonGenerator::BuildPath(const FVector& FirstHit, const FVector& SecondHit,FVector& InCenter,FVector& InSize)
+{
+	FInt32Vector Hit1=FInt32Vector(FirstHit);
+	FInt32Vector Hit2=FInt32Vector(SecondHit);
 	
-	AStaticMeshActor* MergedMesh=NewObject<AStaticMeshActor>(World);
+	if(FMath::IsNearlyEqual(Hit1.X,Hit2.X,2.0f))
+	{
+		if(Hit1.Y>Hit2.Y)
+			InSize = FVector(DungeonData.minPathwaySize.X,FirstHit.Y-SecondHit.Y,DungeonData.minPathwaySize.Z);
+		else
+			InSize = FVector(DungeonData.minPathwaySize.X,SecondHit.Y-FirstHit.Y,DungeonData.minPathwaySize.Z);
+	}
+	else
+	{
+		if(Hit1.X>Hit2.X)
+			InSize = FVector(FirstHit.X-SecondHit.X,DungeonData.minPathwaySize.Y,DungeonData.minPathwaySize.Z);
+		else
+			InSize = FVector(SecondHit.X-FirstHit.X,DungeonData.minPathwaySize.Y,DungeonData.minPathwaySize.Z);
+	}
+	InCenter=(FirstHit+SecondHit)/2;
+	InCenter=InCenter-FVector(0,0,InCenter.Z);
+	//NormalizeVectorToSnap(InCenter,true);
+	
+}
+
+
+
+
+void UBSPDungeonGenerator::GeneratePathways(const FDungeonData& InRoomData,bool RandomPaths)
+{
+	LoadingBar();
+	DeletePathways();
+	
+	DungeonData=InRoomData;
+	for (auto& Room : SpawnedRooms)
+		 if(Room) RandomTraceLine(Room,RandomPaths);
+}
+
+
+
+
+void UBSPDungeonGenerator::RandomTraceLine(ABSPRoom* InRoom,bool RandomPaths)
+{
+	int MaxIndex=4;
+	int Index;
+	float LimitX=DungeonData.initPosition.X+DungeonData.dimensions.X;
+	float LimitY=DungeonData.initPosition.Y+DungeonData.dimensions.Y;
+	
+	FVector ZIncrement=FVector(0,0,DungeonData.minRoomMeshSize.Z);
+	
+	UWorld* World=GEditor->GetEditorWorldContext().World();
+	bool bHorizontalSplit=false;
+	
+	FHitResult Hit,Hit1,Hit2,UpperDoor;
+	FHitResult HitUpperLimit,HitLowerLimit;
+	FHitResult InvHit,InvUpperDoor;
+	
+	FCollisionObjectQueryParams ObjectParams;
+	FActorSpawnParameters ActorParams;
+	
+	ActorParams.ObjectFlags=RF_Transactional|RF_Public;
+	ActorParams.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	
+	ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
+	if(RandomPaths) MaxIndex=FMath::RandRange(1,4);
+
+	
+	FVector CenterOffset=FVector::Zero();
+	bool XAdjusted,YAdjusted;
+	YAdjusted=XAdjusted=false;
+	
+	if(!IsCentered(FMath::RoundToInt32(InRoom->Data.Size.X/DungeonData.minRoomMeshSize.X)))
+	{
+		CenterOffset=CenterOffset+FVector(DungeonData.minRoomMeshSize.X/2,0,0);
+		XAdjusted=true;
+	}
+	
+	if(!IsCentered(FMath::RoundToInt32(InRoom->Data.Size.Y/DungeonData.minRoomMeshSize.Y)))
+	{
+		CenterOffset=CenterOffset+FVector(0,DungeonData.minRoomMeshSize.Y/2,0);
+		YAdjusted=true;
+	}
+	
+
+	CenterOffset=CenterOffset+InRoom->Data.CenterPosition+FVector(0,0,DungeonData.minRoomMeshSize.Z/2);
+	
+	for(SIZE_T i=1;i<=MaxIndex;i++)
+		{
+			FCollisionQueryParams QueryParams;
+			FVector End,PosAdjust,NegAdjust,InvAdjust;
+			FVector LimitAdjust;
+		
+			FVector Start=CenterOffset;
+				
+		
+			Hit.Reset();Hit1.Reset();Hit2.Reset();HitUpperLimit.Reset();HitLowerLimit.Reset();
+
+			if(RandomPaths) Index=FMath::RandRange(1,4);
+			else Index=i;
+		
+			switch (Index)
+			{
+			case 1:
+				PosAdjust=FVector(0,DungeonData.minRoomMeshSize.Y/2,0);
+				Start=Start+FVector(InRoom->Data.Size.X/2,0,0)+FVector(DungeonData.minRoomMeshSize.X/2,0,0)*!XAdjusted;
+				LimitAdjust=FVector(0,DungeonData.minPathwaySize.Y/2,0)-PosAdjust;
+				End=FVector(FMath::Clamp(Start.X+DungeonData.dimensions.X,LimitX*-1,LimitX),Start.Y,Start.Z);
+				InvAdjust=FVector(DungeonData.minRoomMeshSize.X,0,0)*-1;
+				bHorizontalSplit=false;
+				break;
+			case 2:
+				PosAdjust=FVector(0,DungeonData.minRoomMeshSize.Y/2,0);
+				Start=Start-FVector(InRoom->Data.Size.X/2,0,0)-FVector(DungeonData.minRoomMeshSize.X/2,0,0)*(2*XAdjusted);
+				LimitAdjust=FVector(0,DungeonData.minPathwaySize.Y/2,0)-PosAdjust;
+				End=FVector(FMath::Clamp(Start.X-DungeonData.dimensions.X,LimitX*-1,LimitX),Start.Y,Start.Z);
+				InvAdjust=FVector(DungeonData.minRoomMeshSize.X,0,0);
+				bHorizontalSplit=false;
+				break;
+			case 3:
+				PosAdjust=FVector(DungeonData.minRoomMeshSize.X/2,0,0);
+				Start=Start+FVector(0,InRoom->Data.Size.Y/2,0)+FVector(0,DungeonData.minRoomMeshSize.Y/2,0)*!YAdjusted;
+				LimitAdjust=FVector(DungeonData.minPathwaySize.X/2,0,0)-PosAdjust;
+				End=FVector(Start.X,FMath::Clamp(Start.Y+DungeonData.dimensions.Y,LimitY*-1,LimitY),Start.Z);
+				InvAdjust=FVector(0,DungeonData.minRoomMeshSize.Y,0)*-1;
+				bHorizontalSplit=true;
+				break;
+			case 4:
+				PosAdjust=FVector(DungeonData.minRoomMeshSize.X/2,0,0);
+				Start=Start-FVector(0,InRoom->Data.Size.Y/2,0)-FVector(0,DungeonData.minRoomMeshSize.Y/2,0)*(2*XAdjusted);
+				LimitAdjust=FVector(DungeonData.minPathwaySize.X/2,0,0)-PosAdjust;
+				End=FVector(Start.X,FMath::Clamp(Start.Y-DungeonData.dimensions.Y,LimitY*-1,LimitY),Start.Z);
+				InvAdjust=FVector(0,DungeonData.minRoomMeshSize.Y,0);
+				bHorizontalSplit=true;
+				break;
+			default:
+				break;
+			}
+
+			NegAdjust=PosAdjust*-1;
+			// Line Trace Door and limits
+			//World->LineTraceSingleByObjectType(Hit1,Start+PosAdjust,End+PosAdjust,ObjectParams,QueryParams);
+			World->LineTraceSingleByObjectType(Hit,Start,End,ObjectParams,QueryParams);
+			//World->LineTraceSingleByObjectType(Hit2,Start+NegAdjust,End+NegAdjust,ObjectParams,QueryParams);
+			World->LineTraceSingleByObjectType(UpperDoor,Start+ZIncrement,End+ZIncrement,ObjectParams,QueryParams);
+			//Line Trace Limits
+			World->LineTraceSingleByObjectType(HitUpperLimit,Start+LimitAdjust,End+LimitAdjust,ObjectParams,QueryParams);
+			World->LineTraceSingleByObjectType(HitLowerLimit,Start-LimitAdjust,End-LimitAdjust,ObjectParams,QueryParams);
+			//Inv Raycasts
+			World->LineTraceSingleByObjectType(InvHit,Start,Start+InvAdjust,ObjectParams,QueryParams);
+
+			//Debug Lines
+			//DrawDebugLine(World, Start+PosAdjust, End+PosAdjust, FColor::Green,false,60.0f, 0, 2.0f);
+			//DrawDebugLine(World, Start, End, FColor::Green,false,20.0f, 0, 2.0f);
+			//DrawDebugLine(World, Start+NegAdjust, End+NegAdjust, FColor::Green,false,60.0f, 0, 2.0f);
+
+			//DrawDebugLine(World, Start+LimitAdjust, End+LimitAdjust, FColor::Green,false,5.0f, 0, 2.0f);
+			//DrawDebugLine(World, Start-LimitAdjust, End-LimitAdjust, FColor::Green,false,5.0f, 0, 2.0f);
+
+			
+			//if (Hit.bBlockingHit&&Hit1.bBlockingHit&&Hit2.bBlockingHit&&HitUpperLimit.bBlockingHit&&HitLowerLimit.bBlockingHit)
+			if (Hit.bBlockingHit&&HitUpperLimit.bBlockingHit&&HitLowerLimit.bBlockingHit&&InvHit.bBlockingHit)
+			{
+				
+				if(Hit.GetActor()&&HitUpperLimit.GetActor()&&HitLowerLimit.GetActor()&&InvHit.GetActor())
+				{
+					//Parents
+					auto HitParentUpperActor=Cast<ABSPRoom>(HitUpperLimit.GetActor()->GetAttachParentActor());
+					auto HitParentLowerActor=Cast<ABSPRoom>(HitLowerLimit.GetActor()->GetAttachParentActor());
+					auto HitParentActor=Cast<ABSPRoom>(Hit.GetActor()->GetAttachParentActor());
+					auto InvParentActor=Cast<ABSPRoom>(InvHit.GetActor()->GetAttachParentActor());
+					//Front& Inv Door
+					auto HitDoor=Cast<AStaticMeshActor>(Hit.GetActor());
+					auto InvDoor=Cast<AStaticMeshActor>(InvHit.GetActor());
+
+					//Debug
+					//DrawDebugPoint(World,Hit.ImpactPoint,5.0f,FColor::Red,false,20.f,0);
+					//DrawDebugPoint(World,Hit1.ImpactPoint,5.0f,FColor::Red,true,-1,0);
+					//DrawDebugPoint(World,Hit2.ImpactPoint,5.0f,FColor::Red,true,-1,0);
+					
+					//DrawDebugLine(World, Start+ZIncrement, Start+InvAdjust, FColor::Green,false,5.0f, 0, 2.0f);
+					//DrawDebugLine(World, Start+ZIncrement, Start+InvAdjust+ZIncrement, FColor::Green,false,5.0f, 0, 2.0f);
+					//UE_LOG(LogTemp,Warning,TEXT("ActorInv:%d"),InvHit.bBlockingHit&&InvHit.GetActor());
+					
+					if (HitDoor&&!HitParentActor->Data.bIsPathway&&!HitParentActor->Data.BridgeActors.Contains(InRoom)&&
+					//if (HitDoor&&!HitParentActor->Data.BridgeActors.Contains(InRoom)&&
+						HitParentActor==HitParentUpperActor&&HitParentUpperActor==HitParentLowerActor)
+					{
+						
+						World->LineTraceSingleByObjectType(InvUpperDoor,Start+ZIncrement,Start+InvAdjust+ZIncrement,ObjectParams,QueryParams);
+						//if(true)
+						if (FMath::IsNearlyEqual(InvDoor->GetActorLocation().X,HitDoor->GetActorLocation().X,2.0f)
+						||FMath::IsNearlyEqual(InvDoor->GetActorLocation().Y,HitDoor->GetActorLocation().Y,2.0f))
+						{
+							
+							if (InvParentActor&&InvParentActor==InRoom)
+							{
+								FInt32Vector Difference=FInt32Vector(InvDoor->GetActorLocation()-HitDoor->GetActorLocation());
+								FInt32Vector MinLimit=FInt32Vector(DungeonData.minPathwaySize);
+
+								//UE_LOG(LogTemp,Warning,TEXT("Difference:%s"),*Difference.ToString());
+								//UE_LOG(LogTemp,Warning,TEXT("MinRoomSize:%s"),*DungeonData.minRoomSize.ToString());
+
+								
+								if(FMath::Abs(Difference.X)>=MinLimit.X||FMath::Abs(Difference.Y)>=MinLimit.Y)
+									//||FMath::IsNearlyEqual(FMath::Abs(Difference.X),MinLimit.X,1e-01)
+									//||FMath::IsNearlyEqual(FMath::Abs(Difference.Y),MinLimit.Y,1e-01))
+									
+									//&&(FMath::Abs(Difference.X)%FMath::RoundToInt32(DungeonData.minRoomMeshSize.X)==0
+									//&&FMath::Abs(Difference.Y)%FMath::RoundToInt32(DungeonData.minRoomMeshSize.Y)==0))
+								{
+
+									FVector DifferenceAdjust=FVector(Difference.X/DungeonData.minRoomMeshSize.X,
+									Difference.Y/DungeonData.minRoomMeshSize.Y,0);
+									FVector RoundAdjust=FVector(FMath::RoundToInt32(DifferenceAdjust.X),
+									FMath::RoundToInt32(DifferenceAdjust.Y),0);
+									DifferenceAdjust=(DifferenceAdjust-RoundAdjust)*DungeonData.minRoomMeshSize;
+									//UE_LOG(LogTemp,Warning,TEXT("DiffAdjust:%s"),*DifferenceAdjust.ToString());
+
+									HitParentActor->SetActorLocation(HitParentActor->GetActorLocation()+DifferenceAdjust);
+									FVector PathCenter,PathSize;
+									HitParentActor->Data.BridgeActors.AddUnique(InRoom);
+									InRoom->Data.BridgeActors.AddUnique(HitParentActor);
+									
+									BuildPath(InvDoor->GetActorLocation(), HitDoor->GetActorLocation(),PathCenter,PathSize);
+								
+									ABSPRoom* Room=World->SpawnActor<ABSPRoom>(ABSPRoom::StaticClass(),
+										PathCenter,FRotator::ZeroRotator,ActorParams);
+								
+									//UE_LOG(LogTemp,Warning,TEXT("Hit Door:%s"),*(HitDoor->GetActorLocation()).ToString());
+								
+									HitParentActor->Data.Doors.AddUnique(HitDoor);
+									HitDoor->GetStaticMeshComponent()->SetVisibility(false);
+									HitDoor->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("NoCollision"));
+									//UE_LOG(LogTemp,Warning,TEXT("Inv Door:%s"),*(InvDoor->GetActorLocation()).ToString());
+								
+									InvParentActor->Data.Doors.AddUnique(InvDoor);
+									InvDoor->GetStaticMeshComponent()->SetVisibility(false);
+									InvDoor->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("NoCollision"));
+									if(UpperDoor.GetActor())
+									{
+										HitParentActor->Data.Doors.AddUnique(Cast<AStaticMeshActor>(UpperDoor.GetActor()));
+										Cast<AStaticMeshActor>(UpperDoor.GetActor())->GetStaticMeshComponent()->SetVisibility(false);
+										Cast<AStaticMeshActor>(UpperDoor.GetActor())->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("NoCollision"));
+									}
+								
+									if(InvUpperDoor.GetActor())
+									{
+										InvParentActor->Data.Doors.AddUnique(Cast<AStaticMeshActor>(InvUpperDoor.GetActor()));
+										Cast<AStaticMeshActor>(InvUpperDoor.GetActor())->GetStaticMeshComponent()->SetVisibility(false);
+										Cast<AStaticMeshActor>(InvUpperDoor.GetActor())->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("NoCollision"));
+									}
+								
+									Room->InitRoom(FRoom(PathCenter,PathSize,bHorizontalSplit,true,false),DungeonData);
+									SpawnedPathways.AddUnique(Room);
+									
+								}
+								
+								
+							}
+						}
+						
+						
+					}
+				}
+			}
+
+			//if(i==4&&InRoom&&InRoom->Data.BridgeActors.IsEmpty()) InRoom->Destroy();
+		
+		}
+	
+	
+
+	
+}
+
+void UBSPDungeonGenerator::DeleteNoPathwayRooms()
+{
+	LoadingBar();
+	for (auto& Room : SpawnedRooms)
+	{
+		if(Room&&!Room->IsPendingKillPending()&&Room->Data.BridgeActors.IsEmpty())
+			Room->Destroy();
+	}
+	
+}
+
+
+void UBSPDungeonGenerator::ClearDoors(bool InVisibility,bool InClearAll)
+{
+	for (auto Room : SpawnedRooms)
+	{
+			if(Room&&!Room->Data.Doors.IsEmpty())
+			{
+				for (auto InDoor : Room->Data.Doors)
+				{
+					if(InDoor&&!InDoor->IsPendingKillPending())
+					{
+						InDoor->GetStaticMeshComponent()->SetVisibility(InVisibility,false);
+						InDoor->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));
+					}
+				}
+					
+				if(InClearAll)
+					Room->Data.BridgeActors.Empty();
+			}
+		
+		
+		
+	}
+}
+
+void UBSPDungeonGenerator::PackageAll()
+{
+	LoadingBar();
+	TArray<AStaticMeshActor*> AllActors;
+	if(SpawnedRooms.IsEmpty()) return;
+	
+	for (auto& Room : SpawnedRooms)
+	{
+		if(Room&&!Room->Data.Doors.IsEmpty())
+		{
+			for (auto Door :Room->Data.Doors )
+			{
+				if(Door&&!Door->IsPendingKillPending())
+					Door->Destroy();
+			}
+		}
+	}
+	for (auto& Room : SpawnedRooms)
+	{
+		if(!Room) continue;
+		AllActors.Add(MergeStaticMeshes(Room->Data.Floors));
+		AllActors.Add(MergeStaticMeshes(Room->Data.LeftWalls));
+		AllActors.Add(MergeStaticMeshes(Room->Data.RightWalls));
+		AllActors.Add(MergeStaticMeshes(Room->Data.UpWalls));
+		AllActors.Add(MergeStaticMeshes(Room->Data.DownWalls));
+		
+	}
+	for (auto& Pathway : SpawnedPathways)
+	{
+		if(!Pathway) continue;
+		AllActors.Add(MergeStaticMeshes(Pathway->Data.Floors));
+		AllActors.Add(MergeStaticMeshes(Pathway->Data.LeftWalls));
+		AllActors.Add(MergeStaticMeshes(Pathway->Data.RightWalls));
+		AllActors.Add(MergeStaticMeshes(Pathway->Data.UpWalls));
+		AllActors.Add(MergeStaticMeshes(Pathway->Data.DownWalls));
+	}
+	AStaticMeshActor* DungeonMesh=MergeStaticMeshes(AllActors);
+	DungeonMesh->SetPivotOffset(DungeonData.initPosition);
+	DungeonMesh->SetActorLocation(DungeonData.initPosition);
+	
+	/*
+	if(AStaticMeshActor* FloorMesh=MergeStaticMeshes(WorldEditor, FloorToMerge))
+	{
+		UStaticMeshComponent* MeshComp = GetStaticMeshComponent();
+		SetPivotOffset(FloorMesh->GetStaticMeshComponent()->GetStaticMesh()->GetBounds().Origin);
+		SetActorLocation(InRoom.CenterPosition);
+		MeshComp->SetStaticMesh(FloorMesh->GetStaticMeshComponent()->GetStaticMesh());
+		
+		FVector Bounds,Origin;
+		GetActorBounds(false,Origin,Bounds,false);
+		Bounds=FVector(Bounds.X,Bounds.Y,Bounds.Z/4);
+		BoxCollision->SetWorldLocation(Origin);
+		BoxCollision->SetBoxExtent(Bounds);
+		BoxCollision->SetCollisionObjectType(ECC_WorldStatic);
+		
+		FloorMesh->Destroy();
+	}*/
+	
+	DeleteDungeon();
+
+}
+
+void UBSPDungeonGenerator::SpawnPCG()
+{
+	DeleteInternals();
+	if(DungeonData.PCGActors.IsEmpty()) return;
+	
+	FActorSpawnParameters ObjectParams;
+	ObjectParams.ObjectFlags=RF_Transactional|RF_Public;
+	ObjectParams.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	for (auto InRoom : SpawnedRooms)
+	{
+		TSubclassOf<AActor> RandomClass=DungeonData.PCGActors[FMath::RandRange(0,DungeonData.PCGActors.Num()-1)];
+		AActor* PCGActor=GEditor->GetEditorWorldContext().World()->SpawnActor<AActor>(RandomClass,
+			InRoom->Data.CenterPosition,FRotator::ZeroRotator,ObjectParams);
+	
+		TSubclassOf<UPCGComponent> CompClass= UPCGComponent::StaticClass();
+	
+		APCGRoom* PCGRoom=Cast<APCGRoom>(PCGActor);
+		
+		//UE_LOG(LogTemp, Warning, TEXT("Spawned actor class: %s"), *PCGRoom->GetClass()->GetName());
+
+		TArray<UActorComponent*> PCGComponents=PCGActor->K2_GetComponentsByClass(CompClass);
+	
+		for(auto Comps : PCGComponents)
+		{
+			if(auto PCGComp=Cast<UPCGComponent>(Comps))
+			{
+				FString FunctionCall = FString::Printf(TEXT("PrintTest"));
+				PCGActor->CallFunctionByNameWithArguments(*FunctionCall, *GLog, nullptr, true);
+				//PCGRoom->SetColumnsFloatParameter(TEXT("DistanceX"),InRoom->Data.Size.X/10);
+				//PCGRoom->SetColumnsFloatParameter(TEXT("DistanceY"),InRoom->Data.Size.Y/10);
+				PCGComp->Generate();
+			}
+			
+		}
+	
+	
+		SpawnedPCG.Add(PCGActor);
+	}
+	
+}
+
+AStaticMeshActor* UBSPDungeonGenerator::MergeStaticMeshes(const TArray<AStaticMeshActor*>& StaticMeshes)
+{
+	if (StaticMeshes.Num() == 0) return nullptr;
+	
+	AStaticMeshActor* MergedMesh=NewObject<AStaticMeshActor>();
 	FMergeStaticMeshActorsOptions MeshOptions;
 	MeshOptions.bSpawnMergedActor=true;
 	MeshOptions.MeshMergingSettings.bPivotPointAtZero=false;
@@ -323,378 +836,138 @@ AStaticMeshActor* UBSPDungeonGenerator::MergeStaticMeshes(UWorld* World, const T
 	return MergedMesh;
 	
 	
-}*/
-
-void UBSPDungeonGenerator::BSPUniformAlgorithm()
-{
-	DeleteAll();
-	
-	if(!RoomData->MeshEntries[0]->Mesh||!RoomData->MeshEntries[1]->Mesh) return;
-
-	PartitionSpace(FVector(*RoomData->InitPosition), FVector(*RoomData->width, *RoomData->height,1), 0);
-	CreatePairPathWaysAndClean();
-	
-	for (const FRoom& InPathway : Pathways)
-	{
-		ABSPRoom* Room=GEditor->GetEditorWorldContext().World()->SpawnActor<ABSPRoom>(ABSPRoom::StaticClass(),
-			InPathway.CenterPosition,FRotator::ZeroRotator);
-		Room->InitRoom(InPathway,RoomData);
-	}
-	
-	for (const auto& InDepth : Rooms)
-		for (auto& InArray : InDepth.Value)
-			for (auto& InRoom: InArray)
-				{
-				ABSPRoom* Room=GEditor->GetEditorWorldContext().World()->SpawnActor<ABSPRoom>(
-					ABSPRoom::StaticClass(),InRoom.CenterPosition,FRotator::ZeroRotator);
-				Room->InitRoom(InRoom,RoomData);
-				}
-	
-	
 }
 
-void UBSPDungeonGenerator::BSPRandomAlgorithm()
+void UBSPDungeonGenerator::LoadingBar()
 {
-	uint32 Save=0;
-	DeleteAll();
+#if WITH_EDITOR
+	if(!Widget||IsLoadingBarActive()) return;
 
-	if(!RoomData->MeshEntries[0]->Mesh||!RoomData->MeshEntries[1]->Mesh) return;
+	UUserWidget* UserWidget = CreateWidget<UUserWidget>(GEditor->GetEditorWorldContext().World(), Cast<UClass>(Widget->GeneratedClass));
 	
+	if (!UserWidget) return;
 
+	auto LoadingWidget = SNew(SWindow)
+		.Title(FText::FromString(TEXT("DungeonGenerator")))
+		.ClientSize(FVector2D(400.f, 200.f))
+		.SupportsMinimize(false)
+		.SupportsMaximize(false)
+		.HasCloseButton(true)
+		.IsTopmostWindow(true);
 	
-	PartitionSpaceRandom(FVector(*RoomData->InitPosition), FVector(*RoomData->width, *RoomData->height,1), 0,Save);
-	CreatePairPathWaysAndClean();
+	TSharedPtr<SWidget> WidgetContent = UserWidget->TakeWidget();
 	
+		LoadingWidget->SetContent(
+			SNew(SBox)
+			.WidthOverride(400.f)
+			.HeightOverride(200.f)
+			[
+				WidgetContent.ToSharedRef()
+			]
+		);
+
+	FSlateApplication::Get().AddWindow(LoadingWidget);
+	FSlateApplication::Get().Tick();
+	
+#endif
+
+}
+
+
+
+void UBSPDungeonGenerator::DestroyLoadingBar()
+{
+	
+	const TArray<TSharedRef<SWindow>>& Windows = FSlateApplication::Get().GetInteractiveTopLevelWindows();
+	
+	for (const TSharedRef<SWindow>& Window : Windows)
+	{
+		FString Title = Window->GetTitle().ToString();
+		if(Title.Find(TEXT("DungeonGenerator"))>=0)
+		{
+			Window->DestroyWindowImmediately();
+	
+		}
+	}
+	FSlateApplication::Get().ReleaseAllPointerCapture();
+}
+
+bool UBSPDungeonGenerator::IsLoadingBarActive()
+{
+	const FString Title = FSlateApplication::Get().GetActiveTopLevelWindow()->GetTitle().ToString();
+	if(Title.Find(TEXT("DungeonGenerator"))>=0)
+	{
+		return true;
+	}
+	return false;
+}
+
+
+void UBSPDungeonGenerator::SelectParentActor(AActor* InActor)
+{
+	if(!InActor) return;
+	if (AActor* Parent = InActor->GetAttachParentActor())
+	{
+		GEditor->SelectNone(false, true);
+		GEditor->SelectActor(Parent, true, true);
+	}
+}
+
+void UBSPDungeonGenerator::SpawnChests()
+{
+	if(SpawnedRooms.IsEmpty()||DungeonData.ChestActors.IsEmpty()) return;
+	DeleteChests();
 	FActorSpawnParameters ObjectParams;
 	ObjectParams.ObjectFlags=RF_Transactional|RF_Public;
-	ObjectParams.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ObjectParams.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::DontSpawnIfColliding;
+	int32 ChestNumber=FMath::RandRange(0,SpawnedRooms.Num()-1);
 	
-		for (const FRoom& InPathway : Pathways)
-		{
-			ABSPRoom* Room=GEditor->GetEditorWorldContext().World()->SpawnActor<ABSPRoom>(ABSPRoom::StaticClass(),
-				InPathway.CenterPosition,FRotator::ZeroRotator,ObjectParams);
-			Room->InitRoom(InPathway,RoomData);
-			SpawnedPathways.Add(Room);
-			
-		}
-	
-	for (const auto& InDepth : Rooms)
+	for (int32 i=0;i<ChestNumber;i++)
 	{
-		for (auto& InArray : InDepth.Value)
-		{
-			TArray<ABSPRoom*> PairRooms;
-			for (auto& InRoom: InArray)
-			{
-				ABSPRoom* Room=GEditor->GetEditorWorldContext().World()->SpawnActor<ABSPRoom>(ABSPRoom::StaticClass(),
-				InRoom.CenterPosition,FRotator::ZeroRotator,ObjectParams);
-				Room->InitRoom(InRoom,RoomData);
-				PairRooms.Add(Room);
-			}
-			SpawnedRooms.Add(PairRooms);
-		}
-	}
-	
-	UnifyPairRooms();
-
-
-	
-}
-
-void UBSPDungeonGenerator::AssignData(const TSharedPtr<FRoomData>& InRoomData)
-{
-	RoomData = InRoomData;
-}
-
-void UBSPDungeonGenerator::DeleteAll()
-{
-	
-	Pathways.Empty();
-	Rooms.Empty();
-	
-	
-	for (auto& Pairs : SpawnedRooms)
-		for (auto& ActorRoom : Pairs)
-			if (ActorRoom)ActorRoom->Destroy();
-		
-
-	for (auto& Pathway : SpawnedPathways)
-		if (Pathway)Pathway->Destroy();
-	
-	SpawnedPathways.Empty();
-	SpawnedRooms.Empty();
-}
-
-void UBSPDungeonGenerator::BuildPath(const FRoom& FirstRoom, const FRoom& SecondRoom,FVector& InCenter,FVector& InSize)
-{
-	float difx=FirstRoom.CenterPosition.X-SecondRoom.CenterPosition.X;
-	float dify=FirstRoom.CenterPosition.Y-SecondRoom.CenterPosition.Y;
-
-	
-	
-	if (FMath::Abs(difx)<FMath::Abs(dify))
-	{
-		float UpperLimit;
-		float LowerLimit;
-
-		if(FirstRoom.CenterPosition.Y<SecondRoom.CenterPosition.Y)
-		{
-			UpperLimit=SecondRoom.CenterPosition.Y;
-			LowerLimit=FirstRoom.CenterPosition.Y+FirstRoom.Size.Y;
-			if(UpperLimit<LowerLimit)
-			{
-				const float Temp=UpperLimit;
-				UpperLimit=LowerLimit;
-				LowerLimit=Temp;
-			}
-			
-			InSize=FVector(*RoomData->minMeshSizeX,UpperLimit-LowerLimit,1);
-
-			InCenter=FVector(
-				FirstRoom.CenterPosition.X+FirstRoom.Size.X/2,
-				FMath::RoundToInt32((UpperLimit+LowerLimit)/2-InSize.Y/2),
-				FirstRoom.CenterPosition.Z);
-		}
-		else
-		{
-			
-			UpperLimit=FirstRoom.CenterPosition.Y;
-			LowerLimit=SecondRoom.CenterPosition.Y+SecondRoom.Size.Y;
-
-			if(UpperLimit<LowerLimit)
-			{
-				const float Temp=UpperLimit;
-				UpperLimit=LowerLimit;
-				LowerLimit=Temp;
-			}
-			
-			InSize=FVector(*RoomData->minMeshSizeX,UpperLimit-LowerLimit,1);
-
-			InCenter=FVector(
-				FirstRoom.CenterPosition.X+FirstRoom.Size.X/2,
-				FMath::RoundToInt32((UpperLimit+LowerLimit)/2-InSize.Y/2),
-				SecondRoom.CenterPosition.Z);
-		}
-		
-	}
-	else
-	{
-		float RightLimit;
-		float LeftLimit;
-		
-		if(FirstRoom.CenterPosition.X<SecondRoom.CenterPosition.X)
-		{
-			RightLimit=SecondRoom.CenterPosition.X;
-			LeftLimit=FirstRoom.CenterPosition.X+FirstRoom.Size.X;
-			if(RightLimit<LeftLimit)
-			{
-				const float Temp=RightLimit;
-				RightLimit=LeftLimit;
-				LeftLimit=Temp;
-			}
-			InSize=FVector(RightLimit-LeftLimit,*RoomData->minMeshSizeY,1);
-			InCenter=FVector(
-				FMath::RoundToInt32((RightLimit+LeftLimit)/2-InSize.X/2),
-				FirstRoom.CenterPosition.Y+FirstRoom.Size.Y/2,FirstRoom.CenterPosition.Z);
-			
-		}
-		
-		else
-		{
-			RightLimit=FirstRoom.CenterPosition.X;
-			LeftLimit=SecondRoom.CenterPosition.X+SecondRoom.Size.X;
-			if(RightLimit<LeftLimit)
-			{
-				const float Temp=RightLimit;
-				RightLimit=LeftLimit;
-				LeftLimit=Temp;
-			}
-			
-			InSize=FVector(RightLimit-LeftLimit,*RoomData->minMeshSizeY,1);
-			InCenter=FVector(
-				FMath::RoundToInt32((RightLimit+LeftLimit)/2-InSize.X/2),
-				FirstRoom.CenterPosition.Y+FirstRoom.Size.Y/2,SecondRoom.CenterPosition.Z);
-		}
-			
 		
 		
-
-						
-	}
-
-	
-}
-
-void UBSPDungeonGenerator::CreatePairPathWaysAndClean()
-{
-	for (auto& InDepth : Rooms)
-	{
-		for (int i=0; i<InDepth.Value.Num();i++)
-		{
-			if(InDepth.Value[i].Num()==2)
-			{
-				FRoom FirstRoom = InDepth.Value[i][0];
-				FRoom LastRoom = InDepth.Value[i][1];
-				FVector PathCenter,PathSize;
-				BuildPath(FirstRoom, LastRoom,PathCenter,PathSize);
-				Pathways.AddUnique(
-					FRoom(PathCenter,PathSize,FirstRoom.bHorizontalSplit,true));
-				
-			}
-			else InDepth.Value[i].Empty();
-		
-			
-		}
-	}
-	
-}
-
-
-
-void UBSPDungeonGenerator::UnifyPairRooms()
-{
-	for (auto& PairRooms : SpawnedRooms)
-		if(PairRooms.Num()==2) RandomTraceLine(PairRooms);
-	
-}
-
-
-
-
-void UBSPDungeonGenerator::RandomTraceLine(const TArray<ABSPRoom*>& InPair)
-{
-	float LimitX=RoomData->InitPosition->X+*RoomData->width;
-	float LimitY=RoomData->InitPosition->Y+*RoomData->height;
-
-	
-	UWorld* World=GEditor->GetEditorWorldContext().World();
-	bool bHorizontalSplit=false;
-	
-	FHitResult Hit,Hit1,Hit2;
-	FCollisionObjectQueryParams ObjectParams;
-	FCollisionQueryParams QueryParams;
-	FActorSpawnParameters ActorParams;
-	
-	ActorParams.ObjectFlags=RF_Transactional|RF_Public;
-	ActorParams.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	
-	ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
-	for (auto& InRoom : InPair)
-	for(SIZE_T i=1;i<=4;i++)
-		{
-			
-			QueryParams.AddIgnoredActor(InRoom);
-		
-			FVector Start=InRoom->Data.CenterPosition+
-				FVector(InRoom->Data.Size.X/2-*RoomData->minMeshSizeX/2,
-					InRoom->Data.Size.Y/2-*RoomData->minMeshSizeY/2,*RoomData->minMeshSizeY/2);
-			
-			FVector End,PosAdjust,NegAdjust;
-		
-			Hit.Reset();Hit1.Reset();Hit2.Reset();
-	
-			switch (i)
-			{
-			case 1:
-				PosAdjust=FVector(0,*RoomData->minMeshSizeY,0);
-				End=FVector(FMath::Clamp(Start.X+*RoomData->width,LimitX*-1,LimitX),Start.Y,Start.Z);
-				bHorizontalSplit=false;
-				break;
-			case 2:
-				PosAdjust=FVector(0,*RoomData->minMeshSizeY,0);
-				End=FVector(FMath::Clamp(Start.X-*RoomData->width,LimitX*-1,LimitX),Start.Y,Start.Z);
-				bHorizontalSplit=false;
-				break;
-			case 3:
-				PosAdjust=FVector(*RoomData->minMeshSizeX,0,0);
-				End=FVector(Start.X,FMath::Clamp(Start.Y+*RoomData->height,LimitY*-1,LimitY),Start.Z);
-				bHorizontalSplit=true;
-				break;
-			case 4:
-				PosAdjust=FVector(*RoomData->minMeshSizeX,0,0);
-				End=FVector(Start.X,FMath::Clamp(Start.Y-*RoomData->height,LimitY*-1,LimitY),Start.Z);
-				bHorizontalSplit=true;
-				break;
-			default:
-				break;
-			}
-
-			NegAdjust=PosAdjust*-1;
-		
-			World->LineTraceSingleByObjectType(Hit1,Start+PosAdjust,End+PosAdjust,ObjectParams,QueryParams);
-			World->LineTraceSingleByObjectType(Hit,Start,End,ObjectParams,QueryParams);
-			World->LineTraceSingleByObjectType(Hit2,Start+NegAdjust,End+NegAdjust,ObjectParams,QueryParams);
-		
-			//DrawDebugLine(World, Start+Adjust, End+Adjust, FColor::Green,false,60.0f, 0, 2.0f);
-			//DrawDebugLine(World, Start, End, FColor::Green,false,60.0f, 0, 2.0f);
-			//DrawDebugLine(World, Start-Adjust, End-Adjust, FColor::Green,false,60.0f, 0, 2.0f);
-			if (Hit.bBlockingHit&&Hit1.bBlockingHit&&Hit2.bBlockingHit)
-			{
-				if(Hit.GetActor()==Hit1.GetActor()&&Hit1.GetActor()==Hit2.GetActor())
+		FVector RandomRoomPosition=SpawnedRooms[FMath::RandRange(0,SpawnedRooms.Num()-1)]->GetActorLocation();
+		AActor** Chest=SpawnedChests.FindByPredicate([RandomRoomPosition](const AActor* InActor)
 				{
-					//DrawDebugPoint(World,Hit.ImpactPoint,5.0f,FColor::Red,true,-1,0);
-					//DrawDebugPoint(World,Hit1.ImpactPoint,5.0f,FColor::Red,true,-1,0);
-					//DrawDebugPoint(World,Hit2.ImpactPoint,5.0f,FColor::Red,true,-1,0);
-					ABSPRoom* HitActor=Cast<ABSPRoom>(Hit.GetActor());
-					if (HitActor&&HitActor!=InPair[0]&&HitActor!=InPair[1]&&!HitActor->Data.bIsPathway)
-					{
-						FVector PathCenter,PathSize;
-						BuildPath(InRoom->Data, HitActor->Data,PathCenter,PathSize);
-			
-						ABSPRoom* Room=World->SpawnActor<ABSPRoom>(ABSPRoom::StaticClass(),
-							PathCenter,FRotator::ZeroRotator,ActorParams);
-						
-						Room->InitRoom(FRoom(PathCenter,PathSize,bHorizontalSplit,true),RoomData);
-						SpawnedPathways.Add(Room);
-					}
-				}
-			}
-
-		else if (Hit1.bBlockingHit)
+					FVector ChestPostion=InActor->GetActorLocation();
+					return FMath::IsNearlyEqual(ChestPostion.X,RandomRoomPosition.X,1E-01)
+					&& FMath::IsNearlyEqual(ChestPostion.Y,RandomRoomPosition.Y,1E-01)
+					&& FMath::IsNearlyEqual(ChestPostion.Z,RandomRoomPosition.Z,1E-01);
+				});
+		if(!Chest)
 		{
-			if(Hit1.GetActor())
-			{
-				ABSPRoom* HitActor=Cast<ABSPRoom>(Hit1.GetActor());
-				if(HitActor&&HitActor!=InPair[0]&&HitActor!=InPair[1]&&!HitActor->Data.bIsPathway)
-				{
-
-					FVector PathCenter,PathSize;
-					BuildPath(InRoom->Data, HitActor->Data,PathCenter,PathSize);
-			
-					ABSPRoom* Room=World->SpawnActor<ABSPRoom>(ABSPRoom::StaticClass(),
-						PathCenter,FRotator::ZeroRotator,ActorParams);
-					PathCenter=PathCenter+PosAdjust;
-					Room->InitRoom(FRoom(PathCenter,PathSize,bHorizontalSplit,true),RoomData);
-					SpawnedPathways.Add(Room);
-				}
-			}
+			TSubclassOf<AActor> RandomClass=DungeonData.ChestActors[FMath::RandRange(0,DungeonData.ChestActors.Num()-1)];
+			AActor* ChestActor=GEditor->GetEditorWorldContext().World()->SpawnActor<AActor>(RandomClass,
+				RandomRoomPosition,FRotator::ZeroRotator,ObjectParams);
+			SpawnedChests.Add(ChestActor);
 		}
-		else if (Hit2.bBlockingHit)
-		{
-			if(Hit2.GetActor())
-			{
-				ABSPRoom* HitActor=Cast<ABSPRoom>(Hit1.GetActor());
-				if(HitActor&&HitActor!=InPair[0]&&HitActor!=InPair[1]&&!HitActor->Data.bIsPathway)
-				{
-
-					FVector PathCenter,PathSize;
-					BuildPath(InRoom->Data, HitActor->Data,PathCenter,PathSize);
-			
-					ABSPRoom* Room=World->SpawnActor<ABSPRoom>(ABSPRoom::StaticClass(),
-						PathCenter,FRotator::ZeroRotator,ActorParams);
-					PathCenter=PathCenter+NegAdjust;
-					Room->InitRoom(FRoom(PathCenter,PathSize,bHorizontalSplit,true),RoomData);
-					SpawnedPathways.Add(Room);
-				}
-			}
-		}
-			
-		}
-	
-	
-
-	
-	
+	}
 }
+
+TArray<ABSPRoom*> UBSPDungeonGenerator::GetRooms()
+{
+	return  SpawnedRooms;
+}
+
+
+
+void UBSPDungeonGenerator::AddSpawnedPCG(AActor* InActor)
+{
+	if(!InActor) return;
+	SpawnedPCG.Add(InActor);
+}
+
+void UBSPDungeonGenerator::DeleteChests()
+{
+	for(auto& Chest : SpawnedChests)
+	{
+		if(Chest&&!Chest->IsPendingKillPending()) Chest->Destroy();
+	}
+	SpawnedChests.Empty();
+}
+
+
+
 
 
 

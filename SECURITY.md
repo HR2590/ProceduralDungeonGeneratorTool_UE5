@@ -12,9 +12,9 @@ We’ll do our best to respond within 5 working days and fix the issue quickly.
 ✅ Supported Versions
 We actively maintain the following versions:
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 2.0.0   | :white_check_mark: |
+| Version | Description                                 |
+| ------- | ------------------------------------------- |
+| 2.0.0   | It's funtional, but requires more algoritms |
 
 
 Version	Supported
